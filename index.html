@@ -1,56 +1,20 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>Tracker 3D AN-32B</title>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-  <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
-  <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+const firebaseConfig = {
+  // 🔴 PEGA AQUÍ TU firebaseConfig REAL
+};
 
-  <style>
-    html, body, #cesiumContainer {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-  </style>
-</head>
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-<body>
-  <div id="cesiumContainer"></div>
-
-  <script>
-    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
-
-    const viewer = new Cesium.Viewer("cesiumContainer", {
-      terrain: Cesium.Terrain.fromWorldTerrain(),
-      timeline: false,
-      animation: false
-    });
-
-    const plane = viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(0, 0, 1000),
-      point: {
-        pixelSize: 12,
-        color: Cesium.Color.RED
-      }
-    });
-
-    viewer.trackedEntity = plane;
-
-    navigator.geolocation.watchPosition(
-      pos => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const alt = pos.coords.altitude || 1000;
-
-        plane.position = Cesium.Cartesian3.fromDegrees(lon, lat, alt);
-      },
-      err => alert("Error GPS: " + err.message),
-      { enableHighAccuracy: true }
-    );
-  </script>
-</body>
-</html>
+navigator.geolocation.watchPosition(pos => {
+  set(ref(db, "an32/position"), {
+    lat: pos.coords.latitude,
+    lon: pos.coords.longitude,
+    alt: pos.coords.altitude || 1000,
+    time: Date.now()
+  });
+});
+</script>
