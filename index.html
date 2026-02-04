@@ -7,24 +7,14 @@
 </head>
 
 <body>
-  <h2>📡 Enviando posición GPS…</h2>
-  <p id="status">Esperando GPS...</p>
+<h2>📡 Enviando posición GPS…</h2>
+<p id="status">Esperando GPS...</p>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<script type="module">
 
-    // 🔐 TU CONFIGURACIÓN FIREBASE
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    
-   // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCDHpTxxw0XObZFaG4G7VRVl8-ouszM5e8",
   authDomain: "tracker-an32b.firebaseapp.com",
@@ -32,52 +22,38 @@ const firebaseConfig = {
   projectId: "tracker-an32b",
   storageBucket: "tracker-an32b.firebasestorage.app",
   messagingSenderId: "671744221089",
-  appId: "1:671744221089:web:60af7fbf5e992210ec75e0",
-  measurementId: "G-48LH0HJRCE"
+  appId: "1:671744221089:web:60af7fbf5e992210ec75e0"
 };
 
-// Initialize Firebase
+// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+const db = getDatabase(app);
 
-    
+const status = document.getElementById("status");
 
-    // 🔥 Inicializar Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+// GPS en tiempo real
+navigator.geolocation.watchPosition(
+  pos => {
 
-    const status = document.getElementById("status");
+    const data = {
+      lat: pos.coords.latitude,
+      lon: pos.coords.longitude,
+      alt: pos.coords.altitude || 1000,
+      time: Date.now()
+    };
 
-    // 📡 GPS en tiempo real
-    navigator.geolocation.watchPosition(
-      pos => {
-        const data = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          alt: pos.coords.altitude || 1000,
-          acc: pos.coords.accuracy,
-          time: Date.now()
-        };
+    set(ref(db, "an32/position"), data);
 
-        set(ref(db, "an32/position"), data);
+    status.innerHTML = `
+      Lat: ${data.lat}<br>
+      Lon: ${data.lon}<br>
+      Alt: ${data.alt} m
+    `;
+  },
+  err => status.innerText = err.message,
+  { enableHighAccuracy: true }
+);
 
-        status.innerHTML = `
-          Lat: ${data.lat}<br>
-          Lon: ${data.lon}<br>
-          Alt: ${data.alt} m<br>
-          Precisión: ${data.acc} m
-        `;
-      },
-      err => {
-        status.innerText = "❌ Error GPS: " + err.message;
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000
-      }
-    );
-  </script>
+</script>
 </body>
 </html>
-
