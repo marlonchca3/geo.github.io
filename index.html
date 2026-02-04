@@ -1,20 +1,63 @@
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>GPS AN-32B</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
 
-const firebaseConfig = {
-  // 🔴 PEGA AQUÍ TU firebaseConfig REAL
-};
+<body>
+  <h2>📡 Enviando posición GPS…</h2>
+  <p id="status">Esperando GPS...</p>
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-navigator.geolocation.watchPosition(pos => {
-  set(ref(db, "an32/position"), {
-    lat: pos.coords.latitude,
-    lon: pos.coords.longitude,
-    alt: pos.coords.altitude || 1000,
-    time: Date.now()
-  });
-});
-</script>
+    // 🔐 TU CONFIGURACIÓN FIREBASE
+    const firebaseConfig = {
+      apiKey: "TU_API_KEY",
+      authDomain: "TU_PROYECTO.firebaseapp.com",
+      databaseURL: "https://TU_PROYECTO-default-rtdb.firebaseio.com",
+      projectId: "TU_PROYECTO",
+      appId: "TU_APP_ID"
+    };
+
+    // 🔥 Inicializar Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const status = document.getElementById("status");
+
+    // 📡 GPS en tiempo real
+    navigator.geolocation.watchPosition(
+      pos => {
+        const data = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          alt: pos.coords.altitude || 1000,
+          acc: pos.coords.accuracy,
+          time: Date.now()
+        };
+
+        set(ref(db, "an32/position"), data);
+
+        status.innerHTML = `
+          Lat: ${data.lat}<br>
+          Lon: ${data.lon}<br>
+          Alt: ${data.alt} m<br>
+          Precisión: ${data.acc} m
+        `;
+      },
+      err => {
+        status.innerText = "❌ Error GPS: " + err.message;
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+      }
+    );
+  </script>
+</body>
+</html>
