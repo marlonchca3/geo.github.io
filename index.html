@@ -3,57 +3,292 @@
 <head>
   <meta charset="utf-8">
   <title>GPS AN-32B</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!-- Leaflet (mapa liviano) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body{ margin:0; background:#fff; color:#111; }
+    header{ padding:16px 16px 8px; font-family:Georgia, "Times New Roman", serif; }
+    h2{ margin:0; font-size:40px; font-weight:700; }
+    #status{ padding:8px 16px 12px; font-size:22px; line-height:1.25; font-family:Georgia, "Times New Roman", serif; }
+
+    /* área “en blanco” => mapa */
+    #wrap{ padding:0 14px 16px; }
+    #map{
+      width:100%;
+      height:52vh;
+      min-height:320px;
+      border-radius:18px;
+      overflow:hidden;
+      box-shadow:0 10px 30px rgba(0,0,0,.15);
+      position:relative;
+    }
+
+    /* HUD tipo MyRadar */
+    .hud{
+      position:absolute; top:12px; left:12px; right:12px;
+      z-index:1000; display:flex; gap:10px; justify-content:space-between;
+      pointer-events:none;
+      font-family:Arial, sans-serif;
+    }
+    .chip{
+      background:rgba(0,0,0,.62);
+      border:1px solid rgba(255,255,255,.14);
+      color:#fff;
+      border-radius:16px;
+      padding:10px 12px;
+      min-width:140px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow:0 16px 40px rgba(0,0,0,.25);
+    }
+    .chip b{ display:block; font-size:14px; margin-bottom:2px; }
+    .chip small{ opacity:.9; }
+
+    /* Barra inferior BAJO/ALTO + hora */
+    .legend{
+      position:absolute; left:12px; right:12px; bottom:12px;
+      z-index:1000;
+      background:rgba(0,0,0,.62);
+      border:1px solid rgba(255,255,255,.14);
+      color:#fff;
+      border-radius:16px;
+      padding:10px 12px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow:0 16px 40px rgba(0,0,0,.25);
+      font-family:Arial, sans-serif;
+    }
+    .bar{
+      height:8px; border-radius:999px; overflow:hidden;
+      border:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(90deg,
+        #08306b 0%,
+        #2171b5 12%,
+        #1d91c0 22%,
+        #41ab5d 36%,
+        #a1d99b 46%,
+        #ffffb2 60%,
+        #fecc5c 72%,
+        #fd8d3c 82%,
+        #f03b20 92%,
+        #bd0026 100%);
+      box-shadow: inset 0 0 10px rgba(0,0,0,.35);
+    }
+    .legendRow{
+      margin-top:8px;
+      display:flex; justify-content:space-between; align-items:center;
+      font-size:13px; font-weight:700; opacity:.92;
+    }
+    .legendRow .mid{ font-weight:900; letter-spacing:.3px; }
+
+    .btns{
+      display:flex; gap:10px; flex-wrap:wrap;
+      padding: 0 16px 16px;
+      font-family:Arial, sans-serif;
+    }
+    button{
+      border:1px solid rgba(0,0,0,.15);
+      background:#f6f6f6;
+      padding:10px 12px;
+      border-radius:14px;
+      cursor:pointer;
+      font-weight:700;
+    }
+  </style>
 </head>
 
 <body>
-<h2>📡 Enviando posición GPS…</h2>
-<p id="status">Esperando GPS...</p>
+  <header>
+    <h2>📡 Enviando posición GPS…</h2>
+  </header>
 
-<script type="module">
+  <p id="status">Esperando GPS...</p>
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  <div id="wrap">
+    <div id="map">
+      <div class="hud">
+        <div class="chip">
+          <b>Radar</b>
+          <small id="radarState">Cargando…</small>
+        </div>
+        <div class="chip">
+          <b>GPS</b>
+          <small id="gpsState">Buscando señal…</small>
+        </div>
+      </div>
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCDHpTxxw0XObZFaG4G7VRVl8-ouszM5e8",
-  authDomain: "tracker-an32b.firebaseapp.com",
-  databaseURL: "https://tracker-an32b-default-rtdb.firebaseio.com",
-  projectId: "tracker-an32b",
-  storageBucket: "tracker-an32b.firebasestorage.app",
-  messagingSenderId: "671744221089",
-  appId: "1:671744221089:web:60af7fbf5e992210ec75e0"
-};
+      <div class="legend">
+        <div class="bar"></div>
+        <div class="legendRow">
+          <div>BAJO</div>
+          <div class="mid" id="radarTime">--:--</div>
+          <div>ALTO</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-// Inicializar Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+  <div class="btns">
+    <button id="btnCenter">Centrar</button>
+    <button id="btnToggleRadar">Radar: ON</button>
+  </div>
 
-const status = document.getElementById("status");
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-// GPS en tiempo real
-navigator.geolocation.watchPosition(
-  pos => {
-
-    const data = {
-      lat: pos.coords.latitude,
-      lon: pos.coords.longitude,
-      alt: pos.coords.altitude || 1000,
-      time: Date.now()
+    const firebaseConfig = {
+      apiKey: "AIzaSyCDHpTxxw0XObZFaG4G7VRVl8-ouszM5e8",
+      authDomain: "tracker-an32b.firebaseapp.com",
+      databaseURL: "https://tracker-an32b-default-rtdb.firebaseio.com",
+      projectId: "tracker-an32b",
+      storageBucket: "tracker-an32b.firebasestorage.app",
+      messagingSenderId: "671744221089",
+      appId: "1:671744221089:web:60af7fbf5e992210ec75e0"
     };
 
-    set(ref(db, "an32/position"), data);
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-    status.innerHTML = `
-      Lat: ${data.lat}<br>
-      Lon: ${data.lon}<br>
-      Alt: ${data.alt} m
-    `;
-  },
-  err => status.innerText = err.message,
-  { enableHighAccuracy: true }
-);
+    const status = document.getElementById("status");
+    const gpsState = document.getElementById("gpsState");
 
-</script>
+    // =========================
+    // Mapa base satélite (Esri) + labels
+    // =========================
+    const map = L.map("map", { zoomControl: false }).setView([-12.0464, -77.0428], 7);
+
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19 }
+    ).addTo(map);
+
+    L.tileLayer(
+      "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, opacity: 0.95 }
+    ).addTo(map);
+
+    // Marcador azul tipo app
+    const dotIcon = L.divIcon({
+      className: "",
+      html: `<div style="
+        width:14px;height:14px;border-radius:50%;
+        background:#1E90FF;border:3px solid #fff;
+        box-shadow:0 6px 16px rgba(0,0,0,.35);
+      "></div>`,
+      iconSize: [20,20],
+      iconAnchor: [10,10]
+    });
+
+    let marker = L.marker([-12.0464, -77.0428], { icon: dotIcon }).addTo(map);
+
+    document.getElementById("btnCenter").addEventListener("click", () => {
+      const ll = marker.getLatLng();
+      map.setView([ll.lat, ll.lng], Math.max(map.getZoom(), 10));
+    });
+
+    // =========================
+    // Radar RainViewer
+    // =========================
+    let radarLayer = null;
+    let radarVisible = true;
+    const radarState = document.getElementById("radarState");
+    const radarTime = document.getElementById("radarTime");
+    const btnToggleRadar = document.getElementById("btnToggleRadar");
+
+    function fmtHHMM(unixSeconds){
+      const d = new Date(unixSeconds * 1000);
+      const hh = String(d.getHours()).padStart(2,"0");
+      const mm = String(d.getMinutes()).padStart(2,"0");
+      return `${hh}:${mm}`;
+    }
+
+    async function loadRadar(){
+      radarState.textContent = "Cargando…";
+      try{
+        const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", { cache:"no-store" });
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        const meta = await res.json();
+        const frames = meta?.radar?.past;
+        if(!frames?.length) throw new Error("Sin frames");
+
+        const latest = frames[frames.length - 1];
+        const t = latest.time;
+
+        const base = "https://tilecache.rainviewer.com";
+        const url = latest.path
+          ? `${base}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`
+          : `${base}/v2/radar/${t}/256/{z}/{x}/{y}/2/1_1.png`;
+
+        if (radarLayer){
+          map.removeLayer(radarLayer);
+          radarLayer = null;
+        }
+
+        radarLayer = L.tileLayer(url, { opacity: 0.62, zIndex: 400 });
+        if (radarVisible) radarLayer.addTo(map);
+
+        radarState.textContent = radarVisible ? "Activo" : "Oculto";
+        radarTime.textContent = fmtHHMM(t);
+
+      }catch(e){
+        console.log("Radar error:", e);
+        radarState.textContent = "No disponible";
+      }
+    }
+
+    loadRadar();
+    setInterval(loadRadar, 10 * 60 * 1000);
+
+    btnToggleRadar.addEventListener("click", () => {
+      radarVisible = !radarVisible;
+      btnToggleRadar.textContent = `Radar: ${radarVisible ? "ON" : "OFF"}`;
+
+      if(!radarLayer) return;
+      if(radarVisible) radarLayer.addTo(map);
+      else map.removeLayer(radarLayer);
+
+      radarState.textContent = radarVisible ? "Activo" : "Oculto";
+    });
+
+    // =========================
+    // GPS real + envío Firebase (tu código original)
+    // =========================
+    navigator.geolocation.watchPosition(
+      (pos) => {
+        const data = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          alt: pos.coords.altitude || 1000,
+          time: Date.now()
+        };
+
+        // enviar a Firebase
+        set(ref(db, "an32/position"), data);
+
+        // actualizar texto
+        status.innerHTML = `
+          Lat: ${data.lat}<br>
+          Lon: ${data.lon}<br>
+          Alt: ${data.alt} m
+        `;
+
+        // actualizar mapa
+        marker.setLatLng([data.lat, data.lon]);
+        gpsState.textContent = `OK • ${data.lat.toFixed(3)}, ${data.lon.toFixed(3)}`;
+        // centrar suave cuando ya hay señal
+        // map.panTo([data.lat, data.lon]);
+      },
+      (err) => {
+        status.innerText = err.message;
+        gpsState.textContent = "Error GPS";
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+    );
+  </script>
 </body>
 </html>

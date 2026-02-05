@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>GPS AN-32B</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+<h2>📡 Enviando posición GPS…</h2>
+<p id="status">Esperando GPS...</p>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCDHpTxxw0XObZFaG4G7VRVl8-ouszM5e8",
+  authDomain: "tracker-an32b.firebaseapp.com",
+  databaseURL: "https://tracker-an32b-default-rtdb.firebaseio.com",
+  projectId: "tracker-an32b",
+  storageBucket: "tracker-an32b.firebasestorage.app",
+  messagingSenderId: "671744221089",
+  appId: "1:671744221089:web:60af7fbf5e992210ec75e0"
+};
+
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const status = document.getElementById("status");
+
+// GPS en tiempo real
+navigator.geolocation.watchPosition(
+  pos => {
+
+    const data = {
+      lat: pos.coords.latitude,
+      lon: pos.coords.longitude,
+      alt: pos.coords.altitude || 1000,
+      time: Date.now()
+    };
+
+    set(ref(db, "an32/position"), data);
+
+    status.innerHTML = `
+      Lat: ${data.lat}<br>
+      Lon: ${data.lon}<br>
+      Alt: ${data.alt} m
+    `;
+  },
+  err => status.innerText = err.message,
+  { enableHighAccuracy: true }
+);
+
+</script>
+</body>
+</html>
