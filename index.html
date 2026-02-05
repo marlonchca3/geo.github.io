@@ -141,6 +141,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+    // ===== Firebase =====
     const firebaseConfig = {
       apiKey: "AIzaSyCDHpTxxw0XObZFaG4G7VRVl8-ouszM5e8",
       authDomain: "tracker-an32b.firebaseapp.com",
@@ -157,9 +158,7 @@
     const status = document.getElementById("status");
     const gpsState = document.getElementById("gpsState");
 
-    // =========================
-    // Mapa base satélite (Esri) + labels
-    // =========================
+    // ===== Mapa (Esri satélite + labels) =====
     const map = L.map("map", { zoomControl: false }).setView([-12.0464, -77.0428], 7);
 
     L.tileLayer(
@@ -191,11 +190,12 @@
       map.setView([ll.lat, ll.lng], Math.max(map.getZoom(), 10));
     });
 
-    // =========================
-    // Radar RainViewer
-    // =========================
-    let radarLayer = null;
+    // ===== Radar RainViewer ANIMADO (tipo MyRadar) =====
+    let radarLayers = [];
+    let radarFrames = [];
+    let radarIndex = 0;
     let radarVisible = true;
+
     const radarState = document.getElementById("radarState");
     const radarTime = document.getElementById("radarTime");
     const btnToggleRadar = document.getElementById("btnToggleRadar");
@@ -207,57 +207,90 @@
       return `${hh}:${mm}`;
     }
 
-    async function loadRadar(){
+    async function loadRadarFrames(){
       radarState.textContent = "Cargando…";
+
       try{
         const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", { cache:"no-store" });
         if(!res.ok) throw new Error("HTTP " + res.status);
+
         const meta = await res.json();
-        const frames = meta?.radar?.past;
-        if(!frames?.length) throw new Error("Sin frames");
+        radarFrames = meta?.radar?.past;
+        if(!radarFrames?.length) throw new Error("Sin frames");
 
-        const latest = frames[frames.length - 1];
-        const t = latest.time;
+        // limpiar capas anteriores
+        radarLayers.forEach(l => { try{ map.removeLayer(l); }catch{} });
+        radarLayers = [];
 
-        const base = "https://tilecache.rainviewer.com";
-        const url = latest.path
-          ? `${base}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`
-          : `${base}/v2/radar/${t}/256/{z}/{x}/{y}/2/1_1.png`;
-
-        if (radarLayer){
-          map.removeLayer(radarLayer);
-          radarLayer = null;
+        // crear capas por frame
+        for (const f of radarFrames){
+          const url = `https://tilecache.rainviewer.com/v2/radar/${f.time}/256/{z}/{x}/{y}/2/1_1.png`;
+          const layer = L.tileLayer(url, {
+            opacity: 0.88,  // fuerte (verde/amarillo/rojo se nota)
+            zIndex: 999
+          });
+          radarLayers.push(layer);
         }
 
-        radarLayer = L.tileLayer(url, { opacity: 0.62, zIndex: 400 });
-        if (radarVisible) radarLayer.addTo(map);
+        // arrancar en el más reciente
+        radarIndex = radarLayers.length - 1;
 
-        radarState.textContent = radarVisible ? "Activo" : "Oculto";
-        radarTime.textContent = fmtHHMM(t);
+        // mostrar si está ON
+        if (radarVisible) {
+          radarLayers[radarIndex].addTo(map);
+          radarState.textContent = "Activo";
+        } else {
+          radarState.textContent = "Oculto";
+        }
 
-      }catch(e){
+        radarTime.textContent = fmtHHMM(radarFrames[radarIndex].time);
+
+      } catch(e) {
         console.log("Radar error:", e);
         radarState.textContent = "No disponible";
       }
     }
 
-    loadRadar();
-    setInterval(loadRadar, 10 * 60 * 1000);
+    // Cambia frame (animación)
+    const RADAR_ANIM_MS = 1100; // velocidad (ms)
+    setInterval(() => {
+      if (!radarVisible) return;
+      if (!radarLayers.length) return;
 
+      // quitar frame actual
+      try { map.removeLayer(radarLayers[radarIndex]); } catch {}
+
+      // siguiente frame
+      radarIndex = (radarIndex + 1) % radarLayers.length;
+
+      // mostrar nuevo frame
+      try { radarLayers[radarIndex].addTo(map); } catch {}
+
+      // hora
+      radarTime.textContent = fmtHHMM(radarFrames[radarIndex].time);
+    }, RADAR_ANIM_MS);
+
+    // recargar frames cada 10 min
+    loadRadarFrames();
+    setInterval(loadRadarFrames, 10 * 60 * 1000);
+
+    // Toggle radar ON/OFF
     btnToggleRadar.addEventListener("click", () => {
       radarVisible = !radarVisible;
       btnToggleRadar.textContent = `Radar: ${radarVisible ? "ON" : "OFF"}`;
 
-      if(!radarLayer) return;
-      if(radarVisible) radarLayer.addTo(map);
-      else map.removeLayer(radarLayer);
+      // remover todos
+      radarLayers.forEach(l => { try{ map.removeLayer(l); }catch{} });
 
-      radarState.textContent = radarVisible ? "Activo" : "Oculto";
+      if (radarVisible && radarLayers.length) {
+        radarLayers[radarIndex].addTo(map);
+        radarState.textContent = "Activo";
+      } else {
+        radarState.textContent = "Oculto";
+      }
     });
 
-    // =========================
-    // GPS real + envío Firebase (tu código original)
-    // =========================
+    // ===== GPS real + envío Firebase (tu código original) =====
     navigator.geolocation.watchPosition(
       (pos) => {
         const data = {
@@ -280,8 +313,7 @@
         // actualizar mapa
         marker.setLatLng([data.lat, data.lon]);
         gpsState.textContent = `OK • ${data.lat.toFixed(3)}, ${data.lon.toFixed(3)}`;
-        // centrar suave cuando ya hay señal
-        // map.panTo([data.lat, data.lon]);
+
       },
       (err) => {
         status.innerText = err.message;
