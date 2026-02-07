@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Rastreador AN-32B | Smart Zoom</title>
+  <title>Rastreador AN-32B | Navegación Perú</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
@@ -11,7 +11,6 @@
   <style>
     html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background: #000; }
 
-    /* --- HUD MEJORADO CON ZOOM --- */
     #hud {
       position: absolute;
       z-index: 9999;
@@ -26,22 +25,21 @@
       user-select: none;
     }
 
-    /* Clase para agrandar el HUD al tocarlo */
     #hud.zoomed {
-      transform: scale(1.3); /* Aumenta el tamaño un 30% */
+      transform: scale(1.3);
       transform-origin: bottom left;
       background: rgba(0,20,0,0.95);
       border-width: 2px;
     }
 
     @media (min-width: 768px) {
-      #hud { top: 10px; left: 10px; width: 280px; border-radius: 8px; }
+      #hud { top: 10px; left: 10px; width: 300px; border-radius: 8px; }
       #hud.zoomed { transform-origin: top left; }
     }
 
     @media (max-width: 767px) {
       #hud { bottom: 0; left: 0; right: 0; width: 100%; border-radius: 20px 20px 0 0; border:none; border-top: 2px solid #00ff41; }
-      #hud.zoomed { transform: scale(1.15) translateY(-10px); transform-origin: bottom center; }
+      #hud.zoomed { transform: scale(1.1) translateY(-10px); transform-origin: bottom center; }
       .hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     }
 
@@ -56,6 +54,7 @@
     .stat { color: #fff; font-weight: bold; font-size: 14px; }
     hr { border: 0; border-top: 1px solid rgba(0,255,65,0.3); margin: 8px 0; }
     .unit { font-size: 9px; color: #00ff41; margin-left: 2px; }
+    .nav-dest { color: #00e5ff !important; font-size: 11px; }
   </style>
 </head>
 
@@ -90,6 +89,23 @@
     <div id="terrainAlert">⚠️ LOW TERRAIN ⚠️</div>
     
     <hr>
+
+    <div class="hud-grid">
+      <div class="info-block">
+        <span class="label">Prox. Destino</span>
+        <span id="dest-name" class="stat nav-dest">BUSCANDO...</span>
+      </div>
+      <div class="info-block">
+        <span class="label">DME (Distancia)</span>
+        <span id="dme" class="stat">--</span><span class="unit">NM</span>
+      </div>
+      <div class="info-block" style="grid-column: span 2;">
+        <span class="label">ETA (Tiempo Estimado)</span>
+        <span id="eta" class="stat">--</span><span class="unit">MINUTOS</span>
+      </div>
+    </div>
+
+    <hr>
     
     <div style="font-size: 9px; line-height: 1.4;">
       <span id="env" style="color: #fff; display:block;">ESPERANDO ATMÓSFERA...</span>
@@ -114,6 +130,17 @@
       projectId: "tracker-an32b",
     };
 
+    // AEROPUERTOS PERÚ
+    const AEROPUERTOS = [
+      { name: "BASE DIRAVPOL", lat: -12.0219, lon: -77.1143 },
+      { name: "SPJC (LIMA)", lat: -12.0219, lon: -77.1143 },
+      { name: "SPZO (CUSCO)", lat: -13.5357, lon: -71.9387 },
+      { name: "SPQU (AREQUIPA)", lat: -16.3411, lon: -71.5831 },
+      { name: "SPQT (IQUITOS)", lat: -3.7847, lon: -73.3088 },
+      { name: "SPUR (PIURA)", lat: -5.2056, lon: -80.6164 },
+      { name: "SPHI (PUCALLPA)", lat: -8.3781, lon: -74.5741 }
+    ];
+
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
@@ -126,7 +153,10 @@
         agl: document.getElementById("agl"),
         vsi: document.getElementById("vsi"),
         env: document.getElementById("env"),
-        last: document.getElementById("last")
+        last: document.getElementById("last"),
+        dme: document.getElementById("dme"),
+        eta: document.getElementById("eta"),
+        dest: document.getElementById("dest-name")
     };
 
     const viewer = new Cesium.Viewer("cesiumContainer", {
@@ -149,9 +179,15 @@
       }
     });
 
-    const weatherRing = viewer.entities.add({
-      ellipse: { semiMajorAxis: 200000, semiMinorAxis: 200000, material: Cesium.Color.LIME.withAlpha(0.1), outline: true, outlineColor: Cesium.Color.LIME }
-    });
+    // Función Matemática para DME (Haversine)
+    function getDistanceNM(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return (R * c) * 0.539957; // De KM a Millas Náuticas
+    }
 
     // TRANSMISOR GPS
     navigator.geolocation.watchPosition(
@@ -167,7 +203,6 @@
       { enableHighAccuracy: true }
     );
 
-    // RASTREADOR
     let lastFix = null;
     let lastWxAt = 0;
 
@@ -179,24 +214,8 @@
             const res = await fetch(url);
             const data = await res.json();
             const c = data.current;
-            let level = (c.weather_code >= 95 || c.precipitation >= 5) ? "red" : (c.precipitation > 1 ? "yellow" : "green");
-            hud.wx.textContent = `${c.precipitation.toFixed(1)}mm (${level.toUpperCase()})`;
-            hud.env.textContent = `WND: ${c.wind_speed_10m}km/h @ ${c.wind_direction_10m}° | ${c.surface_pressure}hPa`;
-            const color = level === "red" ? Cesium.Color.RED : (level === "yellow" ? Cesium.Color.YELLOW : Cesium.Color.LIME);
-            weatherRing.ellipse.material = color.withAlpha(0.1);
-            weatherRing.ellipse.outlineColor = color;
-        } catch (e) { }
-    }
-
-    async function calculateAGL(lat, lon, altMSL) {
-        const carto = Cesium.Cartographic.fromDegrees(lon, lat);
-        try {
-            const [sampled] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
-            if (sampled) {
-                const aglFeet = (altMSL - sampled.height) * 3.28084;
-                hud.agl.textContent = Math.max(0, aglFeet).toFixed(0);
-                hud.terrainAlert.style.display = (aglFeet < 1000) ? "block" : "none";
-            }
+            hud.wx.textContent = `${c.precipitation.toFixed(1)}mm`;
+            hud.env.textContent = `WND: ${c.wind_speed_10m}km/h @ ${c.wind_direction_10m}°`;
         } catch (e) { }
     }
 
@@ -205,23 +224,48 @@
       if (!d) return;
       const pos = Cesium.Cartesian3.fromDegrees(d.lon, d.lat, d.alt);
       plane.position = pos;
-      weatherRing.position = pos;
       trailPoints.push(pos);
       if(trailPoints.length > 500) trailPoints.shift();
+
+      let currentSpeedKMH = 0;
+
       if (lastFix) {
           const dt = (Date.now() - lastFix.time) / 1000;
+          const distMeters = Cesium.Cartesian3.distance(Cesium.Cartesian3.fromDegrees(lastFix.lon, lastFix.lat), Cesium.Cartesian3.fromDegrees(d.lon, d.lat));
+          currentSpeedKMH = (distMeters / dt) * 3.6;
+          hud.spd.textContent = currentSpeedKMH.toFixed(1);
+          
           const vsi = ((d.alt - lastFix.alt) * 3.28084) / (dt / 60);
           hud.vsi.textContent = (vsi > 0 ? "+" : "") + vsi.toFixed(0);
-          const dist = Cesium.Cartesian3.distance(Cesium.Cartesian3.fromDegrees(lastFix.lon, lastFix.lat), Cesium.Cartesian3.fromDegrees(d.lon, d.lat));
-          hud.spd.textContent = ((dist / dt) * 3.6).toFixed(1);
       }
+
+      // --- LÓGICA DE NAVEGACIÓN ---
+      let nearest = AEROPUERTOS[0];
+      let minDist = 999999;
+
+      AEROPUERTOS.forEach(ap => {
+          const dist = getDistanceNM(d.lat, d.lon, ap.lat, ap.lon);
+          if(dist < minDist) { minDist = dist; nearest = ap; }
+      });
+
+      hud.dest.textContent = nearest.name;
+      hud.dme.textContent = minDist.toFixed(1);
+
+      // Calcular ETA (Minutos)
+      if (currentSpeedKMH > 20) {
+          const speedKnots = currentSpeedKMH / 1.852;
+          const etaMin = (minDist / speedKnots) * 60;
+          hud.eta.textContent = Math.round(etaMin);
+      } else {
+          hud.eta.textContent = "N/A";
+      }
+
       hud.altft.textContent = (d.alt * 3.28084).toFixed(0);
       hud.last.textContent = new Date().toLocaleTimeString();
-      calculateAGL(d.lat, d.lon, d.alt);
+      
       fetchAtmosphere(d.lat, d.lon);
       lastFix = { lat: d.lat, lon: d.lon, alt: d.alt, time: Date.now() };
-      document.getElementById("dot").style.background = "#00ff41";
-      hud.link.textContent = "GPS ONLINE TRANSMISOR";
+      hud.link.textContent = "GPS ONLINE";
     });
   </script>
 </body>
