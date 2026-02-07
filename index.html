@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Rastreador Táctico AN-32B | GPS + HUD</title>
+  <title>Rastreador AN-32B | Smart Zoom</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
@@ -11,58 +11,58 @@
   <style>
     html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background: #000; }
 
-    /* --- HUD TÁCTICO RESPONSIVE --- */
+    /* --- HUD MEJORADO CON ZOOM --- */
     #hud {
       position: absolute;
       z-index: 9999;
-      background: rgba(0,0,0,0.85);
+      background: rgba(0,0,0,0.9);
       color: #00ff41; 
       padding: 15px;
       border: 1px solid #00ff41;
       font: 12px 'Courier New', monospace;
-      box-shadow: 0 0 15px rgba(0,255,65,0.2);
-      transition: all 0.3s ease;
+      box-shadow: 0 0 20px rgba(0,255,65,0.3);
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), bottom 0.3s, left 0.3s;
+      cursor: pointer;
+      user-select: none;
     }
 
-    /* Estilo PC (Lateral) */
+    /* Clase para agrandar el HUD al tocarlo */
+    #hud.zoomed {
+      transform: scale(1.3); /* Aumenta el tamaño un 30% */
+      transform-origin: bottom left;
+      background: rgba(0,20,0,0.95);
+      border-width: 2px;
+    }
+
     @media (min-width: 768px) {
       #hud { top: 10px; left: 10px; width: 280px; border-radius: 8px; }
+      #hud.zoomed { transform-origin: top left; }
     }
 
-    /* Estilo Móvil (Inferior) */
     @media (max-width: 767px) {
-      #hud { bottom: 0; left: 0; right: 0; width: 100%; border-radius: 15px 15px 0 0; border:none; border-top: 1px solid #00ff41; padding: 10px; }
-      .hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-      hr { margin: 5px 0 !important; }
+      #hud { bottom: 0; left: 0; right: 0; width: 100%; border-radius: 20px 20px 0 0; border:none; border-top: 2px solid #00ff41; }
+      #hud.zoomed { transform: scale(1.15) translateY(-10px); transform-origin: bottom center; }
+      .hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     }
 
     #terrainAlert {
-      display: none;
-      color: #ff4444;
-      font-weight: bold;
-      text-align: center;
-      border: 1px solid #ff4444;
-      padding: 4px;
-      margin-top: 5px;
-      animation: blink 0.6s infinite;
-      font-size: 10px;
+      display: none; color: #ff4444; font-weight: bold; text-align: center;
+      border: 1px solid #ff4444; padding: 4px; margin-top: 5px; animation: blink 0.6s infinite;
     }
 
     @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
-
-    #dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; background:#ff4444; }
+    #dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; background:#ff4444; }
     .label { color: #00ff41; text-transform: uppercase; font-size: 9px; opacity: 0.7; display: block; }
-    .stat { color: #fff; font-weight: bold; font-size: 13px; }
+    .stat { color: #fff; font-weight: bold; font-size: 14px; }
     hr { border: 0; border-top: 1px solid rgba(0,255,65,0.3); margin: 8px 0; }
     .unit { font-size: 9px; color: #00ff41; margin-left: 2px; }
-    .warning-text { color: #ff4444 !important; }
   </style>
 </head>
 
 <body>
-  <div id="hud">
+  <div id="hud" onclick="this.classList.toggle('zoomed')">
     <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span><span id="dot"></span> <span id="linkStatus" style="font-size: 10px;">BUSCANDO GPS...</span></span>
+      <span><span id="dot"></span> <span id="linkStatus" style="font-size: 10px;">GPS BUSCANDO...</span></span>
       <span id="last" style="font-size:9px; opacity:0.6">--:--:--</span>
     </div>
     
@@ -73,33 +73,29 @@
         <span class="label">Radar Alt (AGL)</span>
         <span id="agl" class="stat">--</span><span class="unit">FT</span>
       </div>
-      
       <div class="info-block">
         <span class="label">V. Speed (VSI)</span>
         <span id="vsi" class="stat">--</span><span class="unit">FPM</span>
       </div>
-
       <div class="info-block">
         <span class="label">MSL Altitude</span>
         <span id="altft" class="stat">--</span><span class="unit">FT</span>
       </div>
-
       <div class="info-block">
         <span class="label">Ground Speed</span>
         <span id="spd" class="stat">--</span><span class="unit">KM/H</span>
       </div>
     </div>
 
-    <div id="terrainAlert">⚠️ LOW TERRAIN CLEARANCE ⚠️</div>
+    <div id="terrainAlert">⚠️ LOW TERRAIN ⚠️</div>
     
     <hr>
     
     <div style="font-size: 9px; line-height: 1.4;">
-      <span class="label">METAR / ENV</span>
-      <span id="env" style="color: #fff;">ESPERANDO DATOS...</span><br>
-      <span class="label">Weather 200km</span>
-      <span id="wx200" style="color: #fff;">--</span>
+      <span id="env" style="color: #fff; display:block;">ESPERANDO ATMÓSFERA...</span>
+      <span class="label">Weather: <span id="wx200" style="color: #fff; text-transform: none;">--</span></span>
     </div>
+    <div style="text-align: center; font-size: 8px; opacity: 0.4; margin-top: 5px;">[ TOCAR PARA ZOOM ]</div>
   </div>
 
   <div id="cesiumContainer"></div>
@@ -108,7 +104,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // ======= CONFIGURACIÓN =======
     const WEATHER_POLL_MS = 60000;
     Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyMWEwZTAwZS0wYWVjLTQ1ZmUtOGY2OC05NmVjZmQ5OTNhZTEiLCJpZCI6Mzg2Nzc5LCJpYXQiOjE3NzAxNzUzMDB9.Myivn9P57mAFArlOhP_dXj-CmANbGiUnwmTXssotP_o";
 
@@ -122,7 +117,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Referencias HUD
     const hud = {
         link: document.getElementById("linkStatus"),
         terrainAlert: document.getElementById("terrainAlert"),
@@ -135,7 +129,6 @@
         last: document.getElementById("last")
     };
 
-    // Inicializar Mapa
     const viewer = new Cesium.Viewer("cesiumContainer", {
       terrain: Cesium.Terrain.fromWorldTerrain(),
       timeline: false, animation: false, shadows: true,
@@ -143,7 +136,7 @@
     });
 
     const plane = viewer.entities.add({
-      label: { text: "AN-32B DIRAVPOL", font: "10px monospace", pixelOffset: new Cesium.Cartesian2(0, -15) },
+      label: { text: "AN-32B", font: "10px monospace", pixelOffset: new Cesium.Cartesian2(0, -15) },
       point: { pixelSize: 8, color: Cesium.Color.RED }
     });
     viewer.trackedEntity = plane;
@@ -160,23 +153,21 @@
       ellipse: { semiMajorAxis: 200000, semiMinorAxis: 200000, material: Cesium.Color.LIME.withAlpha(0.1), outline: true, outlineColor: Cesium.Color.LIME }
     });
 
-    // --- FUNCIONALIDAD 1: TRANSMISOR GPS ---
+    // TRANSMISOR GPS
     navigator.geolocation.watchPosition(
       pos => {
-        const data = {
+        set(ref(db, "an32/position"), {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
-          alt: pos.coords.altitude || 1000, // Altitud por defecto si el GPS no la da
+          alt: pos.coords.altitude || 1000,
           time: Date.now()
-        };
-        // Enviar a Firebase
-        set(ref(db, "an32/position"), data);
+        });
       },
-      err => { hud.link.textContent = "ERROR GPS: " + err.message; },
+      err => { hud.link.textContent = "GPS ERR"; },
       { enableHighAccuracy: true }
     );
 
-    // --- FUNCIONALIDAD 2: RASTREADOR TÁCTICO ---
+    // RASTREADOR
     let lastFix = null;
     let lastWxAt = 0;
 
@@ -190,7 +181,7 @@
             const c = data.current;
             let level = (c.weather_code >= 95 || c.precipitation >= 5) ? "red" : (c.precipitation > 1 ? "yellow" : "green");
             hud.wx.textContent = `${c.precipitation.toFixed(1)}mm (${level.toUpperCase()})`;
-            hud.env.textContent = `${c.wind_speed_10m}km/h @ ${c.wind_direction_10m}° | ${c.surface_pressure}hPa`;
+            hud.env.textContent = `WND: ${c.wind_speed_10m}km/h @ ${c.wind_direction_10m}° | ${c.surface_pressure}hPa`;
             const color = level === "red" ? Cesium.Color.RED : (level === "yellow" ? Cesium.Color.YELLOW : Cesium.Color.LIME);
             weatherRing.ellipse.material = color.withAlpha(0.1);
             weatherRing.ellipse.outlineColor = color;
@@ -204,28 +195,19 @@
             if (sampled) {
                 const aglFeet = (altMSL - sampled.height) * 3.28084;
                 hud.agl.textContent = Math.max(0, aglFeet).toFixed(0);
-                if (aglFeet < 1000) {
-                    hud.terrainAlert.style.display = "block";
-                    hud.agl.classList.add("warning-text");
-                } else {
-                    hud.terrainAlert.style.display = "none";
-                    hud.agl.classList.remove("warning-text");
-                }
+                hud.terrainAlert.style.display = (aglFeet < 1000) ? "block" : "none";
             }
         } catch (e) { }
     }
 
-    // Escuchar cambios de Firebase (propios o de otros dispositivos)
     onValue(ref(db, "an32/position"), (snap) => {
       const d = snap.val();
       if (!d) return;
-
       const pos = Cesium.Cartesian3.fromDegrees(d.lon, d.lat, d.alt);
       plane.position = pos;
       weatherRing.position = pos;
       trailPoints.push(pos);
       if(trailPoints.length > 500) trailPoints.shift();
-
       if (lastFix) {
           const dt = (Date.now() - lastFix.time) / 1000;
           const vsi = ((d.alt - lastFix.alt) * 3.28084) / (dt / 60);
@@ -233,18 +215,14 @@
           const dist = Cesium.Cartesian3.distance(Cesium.Cartesian3.fromDegrees(lastFix.lon, lastFix.lat), Cesium.Cartesian3.fromDegrees(d.lon, d.lat));
           hud.spd.textContent = ((dist / dt) * 3.6).toFixed(1);
       }
-
       hud.altft.textContent = (d.alt * 3.28084).toFixed(0);
       hud.last.textContent = new Date().toLocaleTimeString();
-      
       calculateAGL(d.lat, d.lon, d.alt);
       fetchAtmosphere(d.lat, d.lon);
-      
       lastFix = { lat: d.lat, lon: d.lon, alt: d.alt, time: Date.now() };
       document.getElementById("dot").style.background = "#00ff41";
-      hud.link.textContent = "ONLINE / GPS ACTIVO";
+      hud.link.textContent = "GPS ONLINE";
     });
-
   </script>
 </body>
 </html>
