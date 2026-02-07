@@ -1,326 +1,250 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <title>GPS AN-32B</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta charset="utf-8" />
+  <title>Rastreador Táctico AN-32B | GPS + HUD</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
-  <!-- Leaflet (mapa liviano) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet"/>
 
   <style>
-    body{ margin:0; background:#fff; color:#111; }
-    header{ padding:16px 16px 8px; font-family:Georgia, "Times New Roman", serif; }
-    h2{ margin:0; font-size:40px; font-weight:700; }
-    #status{ padding:8px 16px 12px; font-size:22px; line-height:1.25; font-family:Georgia, "Times New Roman", serif; }
+    html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background: #000; }
 
-    /* área “en blanco” => mapa */
-    #wrap{ padding:0 14px 16px; }
-    #map{
-      width:100%;
-      height:52vh;
-      min-height:320px;
-      border-radius:18px;
-      overflow:hidden;
-      box-shadow:0 10px 30px rgba(0,0,0,.15);
-      position:relative;
+    /* --- HUD TÁCTICO RESPONSIVE --- */
+    #hud {
+      position: absolute;
+      z-index: 9999;
+      background: rgba(0,0,0,0.85);
+      color: #00ff41; 
+      padding: 15px;
+      border: 1px solid #00ff41;
+      font: 12px 'Courier New', monospace;
+      box-shadow: 0 0 15px rgba(0,255,65,0.2);
+      transition: all 0.3s ease;
     }
 
-    /* HUD tipo MyRadar */
-    .hud{
-      position:absolute; top:12px; left:12px; right:12px;
-      z-index:1000; display:flex; gap:10px; justify-content:space-between;
-      pointer-events:none;
-      font-family:Arial, sans-serif;
+    /* Estilo PC (Lateral) */
+    @media (min-width: 768px) {
+      #hud { top: 10px; left: 10px; width: 280px; border-radius: 8px; }
     }
-    .chip{
-      background:rgba(0,0,0,.62);
-      border:1px solid rgba(255,255,255,.14);
-      color:#fff;
-      border-radius:16px;
-      padding:10px 12px;
-      min-width:140px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow:0 16px 40px rgba(0,0,0,.25);
-    }
-    .chip b{ display:block; font-size:14px; margin-bottom:2px; }
-    .chip small{ opacity:.9; }
 
-    /* Barra inferior BAJO/ALTO + hora */
-    .legend{
-      position:absolute; left:12px; right:12px; bottom:12px;
-      z-index:1000;
-      background:rgba(0,0,0,.62);
-      border:1px solid rgba(255,255,255,.14);
-      color:#fff;
-      border-radius:16px;
-      padding:10px 12px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow:0 16px 40px rgba(0,0,0,.25);
-      font-family:Arial, sans-serif;
+    /* Estilo Móvil (Inferior) */
+    @media (max-width: 767px) {
+      #hud { bottom: 0; left: 0; right: 0; width: 100%; border-radius: 15px 15px 0 0; border:none; border-top: 1px solid #00ff41; padding: 10px; }
+      .hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      hr { margin: 5px 0 !important; }
     }
-    .bar{
-      height:8px; border-radius:999px; overflow:hidden;
-      border:1px solid rgba(255,255,255,.12);
-      background: linear-gradient(90deg,
-        #08306b 0%,
-        #2171b5 12%,
-        #1d91c0 22%,
-        #41ab5d 36%,
-        #a1d99b 46%,
-        #ffffb2 60%,
-        #fecc5c 72%,
-        #fd8d3c 82%,
-        #f03b20 92%,
-        #bd0026 100%);
-      box-shadow: inset 0 0 10px rgba(0,0,0,.35);
-    }
-    .legendRow{
-      margin-top:8px;
-      display:flex; justify-content:space-between; align-items:center;
-      font-size:13px; font-weight:700; opacity:.92;
-    }
-    .legendRow .mid{ font-weight:900; letter-spacing:.3px; }
 
-    .btns{
-      display:flex; gap:10px; flex-wrap:wrap;
-      padding: 0 16px 16px;
-      font-family:Arial, sans-serif;
+    #terrainAlert {
+      display: none;
+      color: #ff4444;
+      font-weight: bold;
+      text-align: center;
+      border: 1px solid #ff4444;
+      padding: 4px;
+      margin-top: 5px;
+      animation: blink 0.6s infinite;
+      font-size: 10px;
     }
-    button{
-      border:1px solid rgba(0,0,0,.15);
-      background:#f6f6f6;
-      padding:10px 12px;
-      border-radius:14px;
-      cursor:pointer;
-      font-weight:700;
-    }
+
+    @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
+
+    #dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; background:#ff4444; }
+    .label { color: #00ff41; text-transform: uppercase; font-size: 9px; opacity: 0.7; display: block; }
+    .stat { color: #fff; font-weight: bold; font-size: 13px; }
+    hr { border: 0; border-top: 1px solid rgba(0,255,65,0.3); margin: 8px 0; }
+    .unit { font-size: 9px; color: #00ff41; margin-left: 2px; }
+    .warning-text { color: #ff4444 !important; }
   </style>
 </head>
 
 <body>
-  <header>
-    <h2>📡 Enviando posición GPS…</h2>
-  </header>
-
-  <p id="status">Esperando GPS...</p>
-
-  <div id="wrap">
-    <div id="map">
-      <div class="hud">
-        <div class="chip">
-          <b>Radar</b>
-          <small id="radarState">Cargando…</small>
-        </div>
-        <div class="chip">
-          <b>GPS</b>
-          <small id="gpsState">Buscando señal…</small>
-        </div>
+  <div id="hud">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span><span id="dot"></span> <span id="linkStatus" style="font-size: 10px;">BUSCANDO GPS...</span></span>
+      <span id="last" style="font-size:9px; opacity:0.6">--:--:--</span>
+    </div>
+    
+    <hr>
+    
+    <div class="hud-grid">
+      <div class="info-block">
+        <span class="label">Radar Alt (AGL)</span>
+        <span id="agl" class="stat">--</span><span class="unit">FT</span>
+      </div>
+      
+      <div class="info-block">
+        <span class="label">V. Speed (VSI)</span>
+        <span id="vsi" class="stat">--</span><span class="unit">FPM</span>
       </div>
 
-      <div class="legend">
-        <div class="bar"></div>
-        <div class="legendRow">
-          <div>BAJO</div>
-          <div class="mid" id="radarTime">--:--</div>
-          <div>ALTO</div>
-        </div>
+      <div class="info-block">
+        <span class="label">MSL Altitude</span>
+        <span id="altft" class="stat">--</span><span class="unit">FT</span>
       </div>
+
+      <div class="info-block">
+        <span class="label">Ground Speed</span>
+        <span id="spd" class="stat">--</span><span class="unit">KM/H</span>
+      </div>
+    </div>
+
+    <div id="terrainAlert">⚠️ LOW TERRAIN CLEARANCE ⚠️</div>
+    
+    <hr>
+    
+    <div style="font-size: 9px; line-height: 1.4;">
+      <span class="label">METAR / ENV</span>
+      <span id="env" style="color: #fff;">ESPERANDO DATOS...</span><br>
+      <span class="label">Weather 200km</span>
+      <span id="wx200" style="color: #fff;">--</span>
     </div>
   </div>
 
-  <div class="btns">
-    <button id="btnCenter">Centrar</button>
-    <button id="btnToggleRadar">Radar: ON</button>
-  </div>
+  <div id="cesiumContainer"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // ===== Firebase =====
+    // ======= CONFIGURACIÓN =======
+    const WEATHER_POLL_MS = 60000;
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyMWEwZTAwZS0wYWVjLTQ1ZmUtOGY2OC05NmVjZmQ5OTNhZTEiLCJpZCI6Mzg2Nzc5LCJpYXQiOjE3NzAxNzUzMDB9.Myivn9P57mAFArlOhP_dXj-CmANbGiUnwmTXssotP_o";
+
     const firebaseConfig = {
       apiKey: "AIzaSyCDHpTxxw0XObZFaG4G7VRVl8-ouszM5e8",
       authDomain: "tracker-an32b.firebaseapp.com",
       databaseURL: "https://tracker-an32b-default-rtdb.firebaseio.com",
       projectId: "tracker-an32b",
-      storageBucket: "tracker-an32b.firebasestorage.app",
-      messagingSenderId: "671744221089",
-      appId: "1:671744221089:web:60af7fbf5e992210ec75e0"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    const status = document.getElementById("status");
-    const gpsState = document.getElementById("gpsState");
+    // Referencias HUD
+    const hud = {
+        link: document.getElementById("linkStatus"),
+        terrainAlert: document.getElementById("terrainAlert"),
+        wx: document.getElementById("wx200"),
+        spd: document.getElementById("spd"),
+        altft: document.getElementById("altft"),
+        agl: document.getElementById("agl"),
+        vsi: document.getElementById("vsi"),
+        env: document.getElementById("env"),
+        last: document.getElementById("last")
+    };
 
-    // ===== Mapa (Esri satélite + labels) =====
-    const map = L.map("map", { zoomControl: false }).setView([-12.0464, -77.0428], 7);
-
-    L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 19 }
-    ).addTo(map);
-
-    L.tileLayer(
-      "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 19, opacity: 0.95 }
-    ).addTo(map);
-
-    // Marcador azul tipo app
-    const dotIcon = L.divIcon({
-      className: "",
-      html: `<div style="
-        width:14px;height:14px;border-radius:50%;
-        background:#1E90FF;border:3px solid #fff;
-        box-shadow:0 6px 16px rgba(0,0,0,.35);
-      "></div>`,
-      iconSize: [20,20],
-      iconAnchor: [10,10]
+    // Inicializar Mapa
+    const viewer = new Cesium.Viewer("cesiumContainer", {
+      terrain: Cesium.Terrain.fromWorldTerrain(),
+      timeline: false, animation: false, shadows: true,
+      navigationHelpButton: false, sceneModePicker: false, fullscreenButton: false
     });
 
-    let marker = L.marker([-12.0464, -77.0428], { icon: dotIcon }).addTo(map);
-
-    document.getElementById("btnCenter").addEventListener("click", () => {
-      const ll = marker.getLatLng();
-      map.setView([ll.lat, ll.lng], Math.max(map.getZoom(), 10));
+    const plane = viewer.entities.add({
+      label: { text: "AN-32B DIRAVPOL", font: "10px monospace", pixelOffset: new Cesium.Cartesian2(0, -15) },
+      point: { pixelSize: 8, color: Cesium.Color.RED }
     });
+    viewer.trackedEntity = plane;
 
-    // ===== Radar RainViewer ANIMADO (tipo MyRadar) =====
-    let radarLayers = [];
-    let radarFrames = [];
-    let radarIndex = 0;
-    let radarVisible = true;
-
-    const radarState = document.getElementById("radarState");
-    const radarTime = document.getElementById("radarTime");
-    const btnToggleRadar = document.getElementById("btnToggleRadar");
-
-    function fmtHHMM(unixSeconds){
-      const d = new Date(unixSeconds * 1000);
-      const hh = String(d.getHours()).padStart(2,"0");
-      const mm = String(d.getMinutes()).padStart(2,"0");
-      return `${hh}:${mm}`;
-    }
-
-    async function loadRadarFrames(){
-      radarState.textContent = "Cargando…";
-
-      try{
-        const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", { cache:"no-store" });
-        if(!res.ok) throw new Error("HTTP " + res.status);
-
-        const meta = await res.json();
-        radarFrames = meta?.radar?.past;
-        if(!radarFrames?.length) throw new Error("Sin frames");
-
-        // limpiar capas anteriores
-        radarLayers.forEach(l => { try{ map.removeLayer(l); }catch{} });
-        radarLayers = [];
-
-        // crear capas por frame
-        for (const f of radarFrames){
-          const url = `https://tilecache.rainviewer.com/v2/radar/${f.time}/256/{z}/{x}/{y}/2/1_1.png`;
-          const layer = L.tileLayer(url, {
-            opacity: 0.88,  // fuerte (verde/amarillo/rojo se nota)
-            zIndex: 999
-          });
-          radarLayers.push(layer);
-        }
-
-        // arrancar en el más reciente
-        radarIndex = radarLayers.length - 1;
-
-        // mostrar si está ON
-        if (radarVisible) {
-          radarLayers[radarIndex].addTo(map);
-          radarState.textContent = "Activo";
-        } else {
-          radarState.textContent = "Oculto";
-        }
-
-        radarTime.textContent = fmtHHMM(radarFrames[radarIndex].time);
-
-      } catch(e) {
-        console.log("Radar error:", e);
-        radarState.textContent = "No disponible";
-      }
-    }
-
-    // Cambia frame (animación)
-    const RADAR_ANIM_MS = 1100; // velocidad (ms)
-    setInterval(() => {
-      if (!radarVisible) return;
-      if (!radarLayers.length) return;
-
-      // quitar frame actual
-      try { map.removeLayer(radarLayers[radarIndex]); } catch {}
-
-      // siguiente frame
-      radarIndex = (radarIndex + 1) % radarLayers.length;
-
-      // mostrar nuevo frame
-      try { radarLayers[radarIndex].addTo(map); } catch {}
-
-      // hora
-      radarTime.textContent = fmtHHMM(radarFrames[radarIndex].time);
-    }, RADAR_ANIM_MS);
-
-    // recargar frames cada 10 min
-    loadRadarFrames();
-    setInterval(loadRadarFrames, 10 * 60 * 1000);
-
-    // Toggle radar ON/OFF
-    btnToggleRadar.addEventListener("click", () => {
-      radarVisible = !radarVisible;
-      btnToggleRadar.textContent = `Radar: ${radarVisible ? "ON" : "OFF"}`;
-
-      // remover todos
-      radarLayers.forEach(l => { try{ map.removeLayer(l); }catch{} });
-
-      if (radarVisible && radarLayers.length) {
-        radarLayers[radarIndex].addTo(map);
-        radarState.textContent = "Activo";
-      } else {
-        radarState.textContent = "Oculto";
+    let trailPoints = [];
+    viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(() => trailPoints, false),
+        width: 3, material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.RED, glowPower: 0.1 })
       }
     });
 
-    // ===== GPS real + envío Firebase (tu código original) =====
+    const weatherRing = viewer.entities.add({
+      ellipse: { semiMajorAxis: 200000, semiMinorAxis: 200000, material: Cesium.Color.LIME.withAlpha(0.1), outline: true, outlineColor: Cesium.Color.LIME }
+    });
+
+    // --- FUNCIONALIDAD 1: TRANSMISOR GPS ---
     navigator.geolocation.watchPosition(
-      (pos) => {
+      pos => {
         const data = {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
-          alt: pos.coords.altitude || 1000,
+          alt: pos.coords.altitude || 1000, // Altitud por defecto si el GPS no la da
           time: Date.now()
         };
-
-        // enviar a Firebase
+        // Enviar a Firebase
         set(ref(db, "an32/position"), data);
-
-        // actualizar texto
-        status.innerHTML = `
-          Lat: ${data.lat}<br>
-          Lon: ${data.lon}<br>
-          Alt: ${data.alt} m
-        `;
-
-        // actualizar mapa
-        marker.setLatLng([data.lat, data.lon]);
-        gpsState.textContent = `OK • ${data.lat.toFixed(3)}, ${data.lon.toFixed(3)}`;
-
       },
-      (err) => {
-        status.innerText = err.message;
-        gpsState.textContent = "Error GPS";
-      },
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+      err => { hud.link.textContent = "ERROR GPS: " + err.message; },
+      { enableHighAccuracy: true }
     );
+
+    // --- FUNCIONALIDAD 2: RASTREADOR TÁCTICO ---
+    let lastFix = null;
+    let lastWxAt = 0;
+
+    async function fetchAtmosphere(lat, lon) {
+        if (Date.now() - lastWxAt < WEATHER_POLL_MS) return;
+        lastWxAt = Date.now();
+        try {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=weather_code,precipitation,wind_speed_10m,wind_direction_10m,surface_pressure`;
+            const res = await fetch(url);
+            const data = await res.json();
+            const c = data.current;
+            let level = (c.weather_code >= 95 || c.precipitation >= 5) ? "red" : (c.precipitation > 1 ? "yellow" : "green");
+            hud.wx.textContent = `${c.precipitation.toFixed(1)}mm (${level.toUpperCase()})`;
+            hud.env.textContent = `${c.wind_speed_10m}km/h @ ${c.wind_direction_10m}° | ${c.surface_pressure}hPa`;
+            const color = level === "red" ? Cesium.Color.RED : (level === "yellow" ? Cesium.Color.YELLOW : Cesium.Color.LIME);
+            weatherRing.ellipse.material = color.withAlpha(0.1);
+            weatherRing.ellipse.outlineColor = color;
+        } catch (e) { }
+    }
+
+    async function calculateAGL(lat, lon, altMSL) {
+        const carto = Cesium.Cartographic.fromDegrees(lon, lat);
+        try {
+            const [sampled] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
+            if (sampled) {
+                const aglFeet = (altMSL - sampled.height) * 3.28084;
+                hud.agl.textContent = Math.max(0, aglFeet).toFixed(0);
+                if (aglFeet < 1000) {
+                    hud.terrainAlert.style.display = "block";
+                    hud.agl.classList.add("warning-text");
+                } else {
+                    hud.terrainAlert.style.display = "none";
+                    hud.agl.classList.remove("warning-text");
+                }
+            }
+        } catch (e) { }
+    }
+
+    // Escuchar cambios de Firebase (propios o de otros dispositivos)
+    onValue(ref(db, "an32/position"), (snap) => {
+      const d = snap.val();
+      if (!d) return;
+
+      const pos = Cesium.Cartesian3.fromDegrees(d.lon, d.lat, d.alt);
+      plane.position = pos;
+      weatherRing.position = pos;
+      trailPoints.push(pos);
+      if(trailPoints.length > 500) trailPoints.shift();
+
+      if (lastFix) {
+          const dt = (Date.now() - lastFix.time) / 1000;
+          const vsi = ((d.alt - lastFix.alt) * 3.28084) / (dt / 60);
+          hud.vsi.textContent = (vsi > 0 ? "+" : "") + vsi.toFixed(0);
+          const dist = Cesium.Cartesian3.distance(Cesium.Cartesian3.fromDegrees(lastFix.lon, lastFix.lat), Cesium.Cartesian3.fromDegrees(d.lon, d.lat));
+          hud.spd.textContent = ((dist / dt) * 3.6).toFixed(1);
+      }
+
+      hud.altft.textContent = (d.alt * 3.28084).toFixed(0);
+      hud.last.textContent = new Date().toLocaleTimeString();
+      
+      calculateAGL(d.lat, d.lon, d.alt);
+      fetchAtmosphere(d.lat, d.lon);
+      
+      lastFix = { lat: d.lat, lon: d.lon, alt: d.alt, time: Date.now() };
+      document.getElementById("dot").style.background = "#00ff41";
+      hud.link.textContent = "ONLINE / GPS ACTIVO";
+    });
+
   </script>
 </body>
 </html>
